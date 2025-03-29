@@ -22,16 +22,16 @@ test_dir = os.path.join(data_dir, "test")
 
 # Image parameters
 img_size = (224, 224)
-batch_size = 32
+batch_size = 64  # Increased batch size
 
 # Data Augmentation & Loading
 datagen = ImageDataGenerator(
     rescale=1.0/255,        # Normalize pixel values between 0 and 1
-    rotation_range=30,      # Increase rotation range
-    width_shift_range=0.3,  # Increase width shift range
-    height_shift_range=0.3, # Increase height shift range
-    shear_range=0.3,        # Increase shearing transformations
-    zoom_range=0.3,         # Increase zoom range
+    rotation_range=20,      # Decreased rotation range
+    width_shift_range=0.2,  # Decreased width shift range
+    height_shift_range=0.2, # Decreased height shift range
+    shear_range=0.2,        # Decreased shearing transformations
+    zoom_range=0.2,         # Decreased zoom range
     horizontal_flip=True,   # Flip images horizontally
     brightness_range=[0.8, 1.2],  # Adjust brightness
     validation_split=0.2    # Split 20% of training data for validation
@@ -67,22 +67,9 @@ test_generator = test_datagen.flow_from_directory(
 
 # Load VGG16 model with pre-trained weights
 base_model = VGG16(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
-base_model.trainable = False  # Freeze the base model
+base_model.trainable = True  # Unfreeze the last few layers of the base model
 
 # Build CNN Model
-# model = Sequential([
-#     Conv2D(32, (3,3), activation='relu', input_shape=(224, 224, 3)),
-#     MaxPooling2D(2,2),
-#     Conv2D(64, (3,3), activation='relu'),
-#     MaxPooling2D(2,2),
-#     Conv2D(128, (3,3), activation='relu'),
-#     MaxPooling2D(2,2),
-#     Flatten(),
-#     Dense(512, activation='relu'),
-#     Dropout(0.5),
-#     Dense(4, activation='softmax')
-# ])
-
 model = Sequential([
     base_model,
     Flatten(),
@@ -92,7 +79,7 @@ model = Sequential([
 ])
 
 # Compile Model
-model.compile(optimizer=Adam(learning_rate=0.0001), loss='categorical_crossentropy', metrics=['accuracy'])
+model.compile(optimizer=Adam(learning_rate=0.0005), loss='categorical_crossentropy', metrics=['accuracy'])  # Increased learning rate
 
 # Early stopping callback
 early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
@@ -112,7 +99,7 @@ test_loss, test_acc = model.evaluate(test_generator)
 print(f"Test Accuracy: {test_acc:.4f}")
 
 # Save Model
-model.save("alzheimers_mri_classifier.h5")
+model.save("alzheimers_mri_classifier.keras")
 
 # Plot Training History
 plt.figure(figsize=(12,5))
