@@ -172,3 +172,11 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+/dataset
+/venv
+
+*.h5
+*.keras
+*.npy
+*.DS_Store
