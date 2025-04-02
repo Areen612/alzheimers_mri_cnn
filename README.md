@@ -90,6 +90,20 @@ CNNs are perfect for image classification because they extract features like edg
 - Graphs of accuracy/loss over epochs help diagnose issues like overfitting.
 - If needed, we fine-tune the model (adjusting layers, changing learning rate, or adding more data).
 
+### Ideal behavior patterns:
+
+**Good model:
+
+- Training loss and validation loss both decrease
+- Small gap between training and validation loss
+- Test loss similar to validation loss
+
+**Overfitting signs:
+
+- Validation loss starts increasing while training loss keeps decreasing
+- Large gap between training and validation loss
+- Test loss significantly higher than training loss
+
 ## 7️⃣ Conclusion: Why CNN Works Best for MRI
 
 1. **Automatically learns important patterns**: Unlike traditional methods where features are manually extracted, CNNs automatically find patterns like brain atrophy.
