@@ -10,6 +10,9 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 from tensorflow.keras.regularizers import l2
+import numpy as np
+import cv2
+import tensorflow.keras.backend as K
 
 # Enable mixed precision training
 mixed_precision.set_global_policy('mixed_float16')
@@ -93,10 +96,13 @@ model = Sequential([
     base_model,
     GlobalAveragePooling2D(),
     BatchNormalization(),
-    Dense(1024, activation='relu', kernel_regularizer=l2(0.0001)),
+    Dense(1536, activation='relu', kernel_regularizer=l2(0.0001)),
     BatchNormalization(),
-    Dropout(0.4),
-    Dense(512, activation='relu', kernel_regularizer=l2(0.0001)),
+    Dropout(0.5),
+    Dense(768, activation='relu', kernel_regularizer=l2(0.0001)),
+    BatchNormalization(),
+    Dropout(0.5),
+    Dense(384, activation='relu', kernel_regularizer=l2(0.0001)),
     BatchNormalization(),
     Dropout(0.4),
     Dense(4, activation='softmax')
@@ -107,13 +113,19 @@ initial_learning_rate = 1e-4
 
 # Compile the model with the learning rate
 model.compile(
-    optimizer=Adam(learning_rate=initial_learning_rate),
+    optimizer=tf.keras.optimizers.AdamW(learning_rate=initial_learning_rate, weight_decay=1e-5),
     loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
     metrics=['accuracy']
 )
 
 # Callbacks
 callbacks = [
+    tf.keras.callbacks.ModelCheckpoint(
+        filepath='best_model.keras',
+        monitor='val_accuracy',
+        save_best_only=True,
+        verbose=1
+    ),
     EarlyStopping(
         monitor='val_loss',
         patience=12,
@@ -163,11 +175,56 @@ plt.xlabel('Epoch')
 plt.ylabel('Loss')
 plt.legend()
 plt.show()
+
 # Save training history
 history_path = "training_history.txt"
-with open(history_path, 'w') as f:
+with open(history_path, 'w', encoding="utf-8") as f:
     for key in history.history.keys():
         f.write(f"{key}: {history.history[key]}\n")
 # Save training history plot
 history_plot_path = "training_history_plot.png"
 plt.savefig(history_plot_path)
+plt.close()
+
+def get_img_array(img_path, size):
+    img = tf.keras.utils.load_img(img_path, target_size=size)
+    array = tf.keras.utils.img_to_array(img)
+    array = preprocess_mri(array)
+    return np.expand_dims(array, axis=0)
+
+def make_gradcam_heatmap(img_array, model, last_conv_layer_name, pred_index=None):
+    grad_model = tf.keras.models.Model(
+        [model.inputs], [model.get_layer(last_conv_layer_name).output, model.output]
+    )
+
+    with tf.GradientTape() as tape:
+        conv_outputs, predictions = grad_model(img_array)
+        if pred_index is None:
+            pred_index = tf.argmax(predictions[0])
+        class_channel = predictions[:, pred_index]
+
+    grads = tape.gradient(class_channel, conv_outputs)
+    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+
+    conv_outputs = conv_outputs[0]
+    heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
+    heatmap = tf.squeeze(heatmap)
+    heatmap = tf.maximum(heatmap, 0) / tf.math.reduce_max(heatmap)
+    return heatmap.numpy()
+
+def save_and_display_gradcam(img_path, heatmap, cam_path="cam.jpg", alpha=0.4):
+    img = cv2.imread(img_path)
+    img = cv2.resize(img, (256, 256))
+    heatmap = cv2.resize(heatmap, (img.shape[1], img.shape[0]))
+    heatmap = np.uint8(255 * heatmap)
+    heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+    superimposed_img = heatmap * alpha + img
+    cv2.imwrite(cam_path, superimposed_img)
+
+# Example usage:
+sample_img_path = val_generator.filepaths[0]
+img_array = get_img_array(sample_img_path, size=img_size)
+last_conv_layer_name = [layer.name for layer in model.layers[0].layers if isinstance(layer, tf.keras.layers.Conv2D)][-1]
+heatmap = make_gradcam_heatmap(img_array, model, last_conv_layer_name)
+save_and_display_gradcam(sample_img_path, heatmap, cam_path="gradcam_result.jpg")
+print("Grad-CAM saved to gradcam_result.jpg")
