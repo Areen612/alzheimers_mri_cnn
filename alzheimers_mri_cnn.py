@@ -2,14 +2,14 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
 from keras import mixed_precision
-from tensorflow.keras.applications import DenseNet121
+from tensorflow.keras.applications import EfficientNetB3
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, GlobalAveragePooling2D, BatchNormalization
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import ReduceLROnPlateau
 from tensorflow.keras.regularizers import l2
-from tensorflow.keras.optimizers.schedules import ExponentialDecay
 
 # Enable mixed precision training
 mixed_precision.set_global_policy('mixed_float16')
@@ -78,14 +78,14 @@ test_generator = test_datagen.flow_from_directory(
 )
 
 # Model Architecture
-base_model = DenseNet121(
+base_model = EfficientNetB3(
     weights='imagenet',
     include_top=False,
     input_shape=(256, 256, 3)
 )
 
 # Fine-tuning strategy
-for layer in base_model.layers[:-50]:
+for layer in base_model.layers[:-100]:
     layer.trainable = False
 
 # Enhanced model architecture
@@ -102,19 +102,13 @@ model = Sequential([
     Dense(4, activation='softmax')
 ])
 
-# Define the learning rate schedule
+# Define the learning rate
 initial_learning_rate = 1e-4
-lr_schedule = ExponentialDecay(
-    initial_learning_rate,
-    decay_steps=1000,
-    decay_rate=0.9,
-    staircase=True
-)
 
-# Compile the model with the learning rate schedule
+# Compile the model with the learning rate
 model.compile(
-    optimizer=Adam(learning_rate=lr_schedule),
-    loss='categorical_crossentropy',
+    optimizer=Adam(learning_rate=initial_learning_rate),
+    loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
     metrics=['accuracy']
 )
 
@@ -122,9 +116,16 @@ model.compile(
 callbacks = [
     EarlyStopping(
         monitor='val_loss',
-        patience=10,
+        patience=12,
         restore_best_weights=True,
         min_delta=0.001
+    ),
+    ReduceLROnPlateau(
+        monitor='val_loss',
+        factor=0.5,
+        patience=4,
+        verbose=1,
+        min_lr=1e-6
     )
 ]
 
@@ -162,3 +163,11 @@ plt.xlabel('Epoch')
 plt.ylabel('Loss')
 plt.legend()
 plt.show()
+# Save training history
+history_path = "training_history.txt"
+with open(history_path, 'w') as f:
+    for key in history.history.keys():
+        f.write(f"{key}: {history.history[key]}\n")
+# Save training history plot
+history_plot_path = "training_history_plot.png"
+plt.savefig(history_plot_path)
